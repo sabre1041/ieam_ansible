@@ -1,0 +1,11 @@
+---
+docker_repo_url: https://download.docker.com/linux/centos/docker-ce.repo
+dnf_packages:
+  - firewalld
+  - docker-ce
+docker_package_manager_options: "--nobest"
+docker_service_name: docker
+
+systemd_packages:
+  - firewalld
+  - docker

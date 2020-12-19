@@ -1,0 +1,14 @@
+---
+
+- name: Get Node List
+  command: >
+    hzn node list
+  register: node_list_result
+  changed_when: false
+
+- name: Register Node
+  block:
+    - name: Register the Node
+      command: >
+        hzn register -m '{{ ieam_node_name }}' -o '{{ ieam_organization }}' -u '{{ ieam_username }}:{{ ieam_api_key }}' -n '{{ ieam_node_name + ":" }}'{{ " -s '"  + ieam_wait_for_service + "'" if ieam_wait_for_service | length > 0}}{{ "-t "  + ieam_timeout if ieam_timeout | length > 0}}{{ " -p '"  + ieam_pattern + "'" if ieam_pattern | length > 0}}
+  when: (ieam_action == 'register') and (node_list_result.stdout | from_json).configstate.state == 'unconfigured'

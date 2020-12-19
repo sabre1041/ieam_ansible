@@ -1,0 +1,9 @@
+- hosts: ieam
+  become: yes
+  tasks:
+    - name: Install Docker-CE
+      include_role:
+        name: docker_ce
+    - name: Configure IEAM
+      include_role:
+        name: ieam

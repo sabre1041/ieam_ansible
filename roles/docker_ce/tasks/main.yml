@@ -1,0 +1,18 @@
+---
+- name: Add Docker Repository
+  get_url:
+    url: "{{ docker_repo_url }}"
+    dest: /etc/yum.repos.d/docker-ce.repo
+    mode: 0600
+
+- name: Install Packages
+  package:
+    name: "{{ dnf_packages }}"
+    state: present
+
+- name: Start and Enable Services
+  service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: "{{ systemd_packages }}"

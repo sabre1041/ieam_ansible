@@ -1,0 +1,30 @@
+---
+# IEAM Cluster URL
+ieam_cluster_url: ""
+
+ieam_username: iamapikey
+ieam_api_key: ""
+
+ieam_organization: ""
+
+ieam_download_clis: false
+
+horizon_config_dir: /etc/horizon
+
+horizon_default_dir: /etc/default
+
+horizon_agent_port: 8510
+
+horizon_mgmt_cert_path: /etc/horizon/agent-install.crt
+
+ieam_tmp_dir: /tmp/horizon
+
+ieam_node_name: ""
+
+ieam_pattern: ""
+
+ieam_wait_for_service: ""
+
+ieam_timeout: ""
+
+ieam_action: register

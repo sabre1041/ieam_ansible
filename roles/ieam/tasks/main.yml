@@ -1,0 +1,89 @@
+---
+
+- name: Verify required parameters
+  assert:
+    msg: "Required IEAM parameters were not provideds"
+    that:
+      - ieam_cluster_url is defined
+      - (ieam_cluster_url | trim | length) > 0
+      - ieam_api_key is defined
+      - (ieam_api_key | trim | length) > 0
+      - ieam_organization is defined
+      - (ieam_organization | trim | length) > 0
+
+- name: Set IEAM Facts
+  set_fact:
+    home_dir: "{{ ansible_env.HOME }}"
+    ieam_css_url: "{{ ieam_cluster_url }}/edge-css/"
+
+- name: Set Node Name Facts
+  set_fact:
+    ieam_node_name: "{{ ansible_hostname }}"
+  when: ieam_node_name | trim | length == 0
+
+
+- name: Download software
+  include_tasks: software.yml
+  when: ieam_download_clis | bool
+
+- name: Create Horizon configuration directories
+  file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ horizon_config_dir }}"
+    - "{{ horizon_default_dir }}"
+
+- name: Create Horizon Configuration file
+  template:
+    src: horizon.j2
+    dest: "{{ horizon_default_dir }}/horizon"
+    mode: 0644
+
+- name: Download IEAM certificate
+  get_url:
+   url: "{{ ieam_css_url }}/api/v1/objects/IBM/agent_files/agent-install.crt/data"
+   dest: "{{ horizon_config_dir }}/agent-install.crt"
+   validate_certs: false
+   force_basic_auth: yes
+   url_username: "{{ ieam_organization }}/{{ ieam_username }}"
+   url_password: "{{ ieam_api_key }}"
+   mode: 0644
+
+- name: Create temp directory for Horizon installers
+  file:
+    path: "{{ ieam_tmp_dir }}"
+    state: directory
+
+- name: Download Horizon package
+  get_url:
+   url: "{{ ieam_css_url }}/api/v1/objects/IBM/agent_files/horizon-agent-linux-rpm-x86_64.tar.gz/data"
+   dest: "{{ ieam_tmp_dir }}/horizon-agent-linux-rpm-x86_64.tar.gz"
+   validate_certs: false
+   force_basic_auth: yes
+   url_username: "{{ ieam_organization }}/{{ ieam_username }}"
+   url_password: "{{ ieam_api_key }}"
+   mode: 0644
+
+- name: Unarchive Horizon package
+  unarchive:
+    src: "{{ ieam_tmp_dir }}/horizon-agent-linux-rpm-x86_64.tar.gz"
+    dest: "{{ ieam_tmp_dir }}"
+    remote_src: yes
+
+- name: Find RPM Packages
+  find:
+    paths: "{{ ieam_tmp_dir }}"
+    patterns: "horizon*.rpm"
+  register: horizon_rpm_packages
+
+- name: Install Horizon Packages
+  package:
+    name: "{{ horizon_rpm_packages.files | map(attribute='path') | list }}"
+
+
+- name: Unregister Node
+  include_tasks: unregister.yml
+
+- name: Register Node
+  include_tasks: registration.yml

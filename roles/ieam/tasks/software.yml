@@ -1,0 +1,12 @@
+---
+
+- name: Download Software
+  get_url:
+    url: "{{ ieam_cluster_url }}/api/cli/{{ item }}-linux-amd64"
+    dest: "/usr/local/bin/{{ item }}"
+    validate_certs: false
+    mode: 0755
+  loop:
+    - cloudctl
+    - kubectl
+    - oc 
