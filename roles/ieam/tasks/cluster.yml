@@ -1,0 +1,250 @@
+---
+- name: Check if Horizon Cluster Files exist
+  stat:
+    path: "{{ ieam_tmp_dir }}/{{ ieam_edge_cluster_files_filename }}"
+  register: ieam_cluster_files_exist
+
+- name: Download Horizon Cluster Files
+  get_url:
+    url: "{{ ieam_css_url }}/api/v1/objects/IBM/agent_files/{{ ieam_edge_cluster_files_filename }}/data"
+    dest: "{{ ieam_tmp_dir }}/{{ ieam_edge_cluster_files_filename }}"
+    validate_certs: false
+    force_basic_auth: yes
+    url_username: "{{ ieam_organization }}/{{ ieam_username }}"
+    url_password: "{{ ieam_api_key }}"
+    mode: 0644
+  when: not ieam_cluster_files_exist.stat.exists
+
+- name: Unarchive Horizon Cluster Files
+  unarchive:
+    src: "{{ ieam_tmp_dir }}/{{ ieam_edge_cluster_files_filename }}"
+    dest: "{{ ieam_tmp_dir }}"
+    remote_src: yes
+
+- name: Check if Horizon Edge Tar exist
+  stat:
+    path: "{{ ieam_tmp_dir }}/{{ ieam_agent_tar_filename }}"
+  register: ieam_edge_tar_exist
+
+- name: Download Horizon Edge Tar
+  get_url:
+    url: "{{ ieam_css_url }}/api/v1/objects/IBM/agent_files/{{ ieam_agent_tar_filename }}/data"
+    dest: "{{ ieam_tmp_dir }}/{{ ieam_agent_tar_filename }}"
+    validate_certs: false
+    force_basic_auth: yes
+    url_username: "{{ ieam_organization }}/{{ ieam_username }}"
+    url_password: "{{ ieam_api_key }}"
+    mode: 0644
+  when: not ieam_edge_tar_exist.stat.exists
+
+- name: Expose OpenShift Registry
+  community.kubernetes.k8s:
+    state: present
+    merge_type: merge
+    definition:
+      kind: Config
+      apiVersion: imageregistry.operator.openshift.io/v1
+      metadata:
+        name: cluster
+      spec:
+        managementState: Managed
+        defaultRoute: true
+
+- name: Get the OpenShift registry route object
+  k8s_info:
+    name: default-route
+    api_version: route.openshift.io/v1
+    kind: route
+    namespace: openshift-image-registry
+  register: image_registry
+  until: image_registry.resources | length > 0
+  retries: 10
+  delay: 20
+
+- name: Set the url for the exposed image registry url
+  set_fact:
+    imageregistry_url: "{{ image_registry.resources[0].spec.host }}"
+
+- name: Ensure the agent namespace exists.
+  community.kubernetes.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ ieam_agent_namespace }}"
+    state: present
+
+- name: Create the Service Account for pushing images.
+  community.kubernetes.k8s:
+    api_version: v1
+    kind: ServiceAccount
+    name: "{{ ieam_image_sa_name }}"
+    namespace: "{{ ieam_agent_namespace }}"
+    state: present
+
+- name: Get the Service Account for pushing images
+  k8s_info:
+    name: "{{ ieam_image_sa_name }}"
+    namespace: "{{ ieam_agent_namespace }}"
+    api_version: v1
+    kind: ServiceAccount
+  register: created_ieam_sa
+  until: created_ieam_sa.resources | length > 0 and created_ieam_sa.resources[0].secrets | length > 0
+  retries: 10
+  delay: 20
+
+- name: Get the Service Account Token Secret
+  k8s_info:
+    name: "{{ (created_ieam_sa.resources[0].secrets | selectattr('name', 'match', '^'+ ieam_image_sa_name + '-token-.*') | list | first).name }}"
+    namespace: "{{ ieam_agent_namespace }}"
+    api_version: v1
+    kind: Secret
+  register: ieam_service_account_token_secret
+  no_log: true
+
+- name: Set the Service Account Token
+  set_fact:
+    ieam_sa_token: "{{ ieam_service_account_token_secret.resources[0].data.token | b64decode }}"
+  no_log: true
+
+- name: Create the Image Service Account RoleBinding.
+  community.kubernetes.k8s:
+    definition:
+      kind: RoleBinding
+      apiVersion: rbac.authorization.k8s.io/v1
+      metadata:
+        name: "ieam-image-edit"
+        namespace: "{{ ieam_agent_namespace }}"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: edit
+      subjects:
+        - kind: ServiceAccount
+          name: "{{ ieam_image_sa_name }}"
+          namespace: "{{ ieam_agent_namespace }}"
+    state: present
+
+- name: Inspect Agent Tar
+  command: >
+    skopeo inspect docker-archive:{{ ieam_tmp_dir }}/{{ ieam_agent_tar_filename }}
+  register: agent_tar
+
+- name: Set Agent Image Facts
+  set_fact:
+    ieam_agent_image_name: "{{ (agent_tar.stdout | from_json).Labels['name'] }}"
+    ieam_agent_image_tag: "{{ (agent_tar.stdout | from_json).Labels['version'] }}"
+
+- name: Set Image to Publish Fact
+  set_fact:
+    ieam_agent_image: "{{ imageregistry_url }}/{{ ieam_agent_namespace }}/{{ ieam_agent_image_name }}:{{ ieam_agent_image_tag }}"
+
+- name: Check if Image Exists on Cluster
+  k8s_info:
+    name: "{{ ieam_agent_image_name }}"
+    namespace: "{{ ieam_agent_namespace }}"
+    api_version: image.openshift.io/v1
+    kind: ImageStream
+  register: ieam_agent_imagestream
+
+- name: Copy image to cluster
+  command: >
+    skopeo copy --dest-tls-verify=false --dest-creds=openshift:{{ ieam_sa_token }} docker-archive:{{ ieam_tmp_dir }}/{{ ieam_agent_tar_filename }} docker://{{ ieam_agent_image }}
+  when: ieam_agent_imagestream.resources | length == 0
+
+- name: Create the Agent Service Account.
+  community.kubernetes.k8s:
+    api_version: v1
+    kind: ServiceAccount
+    name: "{{ ieam_agent_sa_name }}"
+    namespace: "{{ ieam_agent_namespace }}"
+    state: present
+
+- name: Create the Agent Service Account ClusterRoleBinding.
+  community.kubernetes.k8s:
+    definition:
+      kind: ClusterRoleBinding
+      apiVersion: rbac.authorization.k8s.io/v1
+      metadata:
+        name: "{{ ieam_agent_sa_name }}"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cluster-admin
+      subjects:
+        - kind: ServiceAccount
+          name: "{{ ieam_agent_sa_name }}"
+          namespace: "{{ ieam_agent_namespace }}"
+    state: present
+
+- name: Create Agent Secrets
+  community.kubernetes.k8s:
+    definition:
+      kind: Secret
+      apiVersion: v1
+      metadata:
+        name: "{{ ieam_agent_secrets_name }}"
+        namespace: "{{ ieam_agent_namespace }}"
+      data:
+        agent-install.crt: "{{ lookup('file', ieam_tmp_dir + '/agent-install.crt') | b64encode }}"
+    state: present
+
+- name: Create Agent ConfigMap
+  community.kubernetes.k8s:
+    definition:
+      kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        name: "{{ ieam_agent_configmap_name }}"
+        namespace: "{{ ieam_agent_namespace }}"
+      data:
+        horizon: |
+          {{ lookup('template', 'horizon.j2') }}
+    state: present
+
+- name: Get PersistentVolumeClaim Resource
+  include_vars:
+    name: ieam_persistentvolumeclaim
+    file: "{{ ieam_tmp_dir }}/{{ ieam_cluster_persistentvolumeclaim_filename }}"
+
+- name: Update IEAM PersistentVolumeClaim
+  set_fact:
+    ieam_persistentvolumeclaim: "{{ ieam_persistentvolumeclaim|combine({'metadata': {'namespace': ieam_agent_namespace},'spec':{'storageClassName': ieam_storageclass}}, recursive=True) }}"
+
+- name: Create PersistentVolumeClaim
+  community.kubernetes.k8s:
+    definition: "{{ ieam_persistentvolumeclaim }}"
+    state: present
+
+- name: Get Deployment Resource
+  include_vars:
+    name: ieam_deployment
+    file: "{{ ieam_tmp_dir }}/{{ ieam_cluster_deployment_filename }}"
+
+- name: Update IEAM Deployment
+  set_fact:
+    ieam_deployment: "{{ ieam_deployment|combine({'metadata': { 'annotations': { 'image.openshift.io/triggers': (image_trigger_annotation | to_json) }, 'namespace': ieam_agent_namespace},'spec':{'template':{'spec':{'containers':[ieam_deployment.spec.template.spec.containers[0] | combine({'image': ' ', 'env':[{'name': 'HZN_ORG_ID','value': ieam_organization}]}, recursive=True)]}}}}, recursive=True) }}"
+  vars:
+    image_trigger_annotation:
+      - from:
+          kind: ImageStreamTag
+          name: "{{ ieam_agent_image_name }}:{{ ieam_agent_image_tag }}"
+        fieldPath: "spec.template.spec.containers[0].image"
+
+- name: Create Deployment
+  community.kubernetes.k8s:
+    definition: "{{ ieam_deployment }}"
+    state: present
+
+- name: Check deployment pods for ready check
+  kubernetes.core.k8s_info:
+    kind: Deployment
+    api_version: apps/v1
+    namespace: "{{ ieam_agent_namespace }}"
+    name: "{{ ieam_agent_deployment_name }}"
+  register: ieam_deployment_status
+  retries: 10
+  until:
+    - ieam_deployment_status.resources[0].status.readyReplicas is defined
+    - ieam_deployment_status.resources[0].status.readyReplicas | int == ieam_deployment_status.resources[0].status.replicas | int
+
+- name: Manage Registration
+  include_tasks: manage_registration.yml

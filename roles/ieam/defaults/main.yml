@@ -1,30 +1,43 @@
 ---
-# IEAM Cluster URL
-ieam_cluster_url: ""
+# Install Type
+ieam_install_mode: cluster # 'cluster' or 'device'
 
-ieam_username: iamapikey
-ieam_api_key: ""
-
-ieam_organization: ""
-
+# Common Configuration
 ieam_download_clis: false
-
-horizon_config_dir: /etc/horizon
-
-horizon_default_dir: /etc/default
-
+ieam_certificate_name: agent-install.crt
+ieam_tmp_dir: /tmp/horizon
 horizon_agent_port: 8510
 
+# IEAM Hub Cluster Configuration
+ieam_cluster_url: ""
+ieam_username: iamapikey
+ieam_api_key: ""
+ieam_organization: ""
+
+# Device
+ieam_agent_skip_install_packages: false
 horizon_mgmt_cert_path: /etc/horizon/agent-install.crt
+horizon_cluster_cert_path: /etc/default/cert/agent-install.crt
+horizon_config_dir: /etc/horizon
+horizon_default_dir: /etc/default
+horizon_systemd_name: horizon
 
-ieam_tmp_dir: /tmp/horizon
+# Cluster
+ieam_agent_namespace: openhorizon-agent
+ieam_agent_sa_name: agent-service-account
+ieam_agent_secrets_name: openhorizon-agent-secrets
+ieam_agent_configmap_name: openhorizon-agent-config
+ieam_agent_deployment_name: agent
+ieam_storageclass: gp2
+ieam_image_sa_name: ieam-image
+ieam_cluster_deployment_filename: deployment-template.yml
+ieam_cluster_persistentvolumeclaim_filename: persistentClaim-template.yml
+ieam_edge_cluster_files_filename: horizon-agent-edge-cluster-files.tar.gz
+ieam_agent_tar_filename: amd64_anax_k8s.tar.gz
 
+# Registration Variables
 ieam_node_name: ""
-
 ieam_pattern: ""
-
 ieam_wait_for_service: ""
-
 ieam_timeout: ""
-
 ieam_action: register

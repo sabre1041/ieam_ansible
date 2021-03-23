@@ -1,6 +1,6 @@
 ---
-
 - name: Download Software
+  become: yes
   get_url:
     url: "{{ ieam_cluster_url }}/api/cli/{{ item }}-linux-amd64"
     dest: "/usr/local/bin/{{ item }}"
@@ -9,4 +9,5 @@
   loop:
     - cloudctl
     - kubectl
-    - oc 
+    - oc
+  when: ieam_download_clis | bool

@@ -1,0 +1,80 @@
+---
+- name: Set Registration Commands
+  set_fact:
+    hzn_node_list_command: "hzn node list"
+    hzn_registration_command: 'hzn register -m ''{{ ieam_node_name }}'' -o ''{{ ieam_organization }}'' -u ''{{ ieam_username }}:{{ ieam_api_key }}'' -n ''{{ ieam_node_name + ":" }}''{{ " -s ''"  + ieam_wait_for_service + "''" if ieam_wait_for_service | length > 0}}{{ "-t "  + ieam_timeout if ieam_timeout | length > 0}}{{ " -p ''"  + ieam_pattern + "''" if ieam_pattern | length > 0}}'
+    hzn_unregister_command: "hzn unregister -f -r"
+    hzn_unregister_deep_command: "hzn unregister -f -r -D"
+
+- name: Get Node List (Device)
+  command: "{{ hzn_node_list_command }}"
+  register: node_list_result_device
+  changed_when: false
+  when: ieam_install_mode == "device"
+
+- name: Get Node List (Cluster)
+  block:
+    - name: Get the Agent pod
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ ieam_agent_namespace }}"
+        label_selectors:
+          - app=agent
+      register: agent_pod
+
+    - name: Check state of Agent
+      kubernetes.core.k8s_exec:
+        namespace: "{{ ieam_agent_namespace }}"
+        pod: "{{ agent_pod.resources[0].metadata.name }}"
+        command: "{{ hzn_node_list_command }}"
+      register: node_list_result_cluster
+  when: ieam_install_mode == "cluster"
+
+- name: Set Node List Result
+  set_fact:
+    node_list_result: "{{ node_list_result_cluster if not node_list_result_cluster.skipped else node_list_result_device }}"
+
+- name: Unregistration
+  block:
+    - name: Unregister Node (Device)
+      block:
+        - name: Unregister Node - Device
+          become: yes
+          command: "{{ hzn_unregister_command }}"
+          ignore_errors: true
+          register: unregister_result
+
+        - name: Unregister Node (Deep Clean) - Device
+          command: "{{ hzn_unregister_deep_command }}"
+          when: unregister_result.rc != 0
+      when: ieam_install_mode == "device"
+    - name: Unregister Node (Cluster)
+      block:
+        - name: Unregister the Node (Cluster) - Cluster
+          kubernetes.core.k8s_exec:
+            namespace: "{{ ieam_agent_namespace }}"
+            pod: "{{ agent_pod.resources[0].metadata.name }}"
+            command: "{{ hzn_unregister_command }}"
+        - name: Unregister the Node (Deep Clean) - Cluster
+          kubernetes.core.k8s_exec:
+            namespace: "{{ ieam_agent_namespace }}"
+            pod: "{{ agent_pod.resources[0].metadata.name }}"
+            command: "{{ hzn_unregister_deep_command }}"
+      when: ieam_install_mode == "cluster"
+  when: (ieam_action == 'unregister') or (ieam_node_name != (node_list_result.stdout | from_json).id) or (ieam_pattern != (node_list_result.stdout | from_json).pattern)
+
+- name: Registration
+  block:
+    - name: Register Node
+      block:
+        - name: Register the Node (Device)
+          become: yes
+          command: "{{ hzn_registration_command }}"
+          when: ieam_install_mode == "device"
+        - name: Register the Node (Cluster)
+          kubernetes.core.k8s_exec:
+            namespace: "{{ ieam_agent_namespace }}"
+            pod: "{{ agent_pod.resources[0].metadata.name }}"
+            command: "{{ hzn_registration_command }}"
+          when: ieam_install_mode == "cluster"
+  when: (ieam_action == 'register') and (node_list_result.stdout | from_json).configstate.state == 'unconfigured'

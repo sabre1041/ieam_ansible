@@ -1,0 +1,59 @@
+---
+- name: Create Horizon configuration directories
+  become: yes
+  file:
+    path: "{{ item }}"
+    state: directory
+  loop:
+    - "{{ horizon_config_dir }}"
+    - "{{ horizon_default_dir }}"
+
+- name: Copy IEAM Certificate to Config Directory
+  become: yes
+  copy:
+    src: "{{ ieam_tmp_dir }}/{{ ieam_certificate_name }}"
+    dest: "{{ horizon_config_dir }}/{{ ieam_certificate_name }}"
+    remote_src: yes
+
+- name: Create Horizon Configuration file
+  become: yes
+  template:
+    src: horizon.j2
+    dest: "{{ horizon_default_dir }}/horizon"
+    mode: 0644
+
+- name: Download Horizon package
+  get_url:
+    url: "{{ ieam_css_url }}/api/v1/objects/IBM/agent_files/horizon-agent-linux-rpm-x86_64.tar.gz/data"
+    dest: "{{ ieam_tmp_dir }}/horizon-agent-linux-rpm-x86_64.tar.gz"
+    validate_certs: false
+    force_basic_auth: yes
+    url_username: "{{ ieam_organization }}/{{ ieam_username }}"
+    url_password: "{{ ieam_api_key }}"
+    mode: 0644
+
+- name: Unarchive Horizon package
+  unarchive:
+    src: "{{ ieam_tmp_dir }}/horizon-agent-linux-rpm-x86_64.tar.gz"
+    dest: "{{ ieam_tmp_dir }}"
+    remote_src: yes
+
+- name: Find RPM Packages
+  find:
+    paths: "{{ ieam_tmp_dir }}"
+    patterns: "horizon*.rpm"
+  register: horizon_rpm_packages
+
+- name: Install Horizon Packages
+  become: yes
+  package:
+    name: "{{ horizon_rpm_packages.files | map(attribute='path') | list }}"
+  when: not ieam_agent_skip_install_packages | bool
+
+- name: Start horizon Service
+  systemd:
+    name: "{{ horizon_systemd_name }}"
+    state: started
+
+- name: Manage Registration
+  include_tasks: manage_registration.yml
