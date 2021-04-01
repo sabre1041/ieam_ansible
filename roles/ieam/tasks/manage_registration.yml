@@ -2,7 +2,7 @@
 - name: Set Registration Commands
   set_fact:
     hzn_node_list_command: "hzn node list"
-    hzn_registration_command: 'hzn register -m ''{{ ieam_node_name }}'' -o ''{{ ieam_organization }}'' -u ''{{ ieam_username }}:{{ ieam_api_key }}'' -n ''{{ ieam_node_name + ":" }}''{{ " -s ''"  + ieam_wait_for_service + "''" if ieam_wait_for_service | length > 0}}{{ "-t "  + ieam_timeout if ieam_timeout | length > 0}}{{ " -p ''"  + ieam_pattern + "''" if ieam_pattern | length > 0}}'
+    hzn_registration_command: 'hzn register -m ''{{ ieam_node_name }}'' -o ''{{ ieam_organization }}'' -u ''{{ ieam_username }}:{{ ieam_api_key }}'' -n ''{{ ieam_node_name + ":" }}''{{ " -s ''"  + ieam_wait_for_service + "''" if ieam_wait_for_service | length > 0 else omit }}{{ "-t "  + ieam_timeout if ieam_timeout | length > 0 else omit }}{{ " -p ''"  + ieam_pattern + "''" if ieam_pattern | length > 0 else omit }}'
     hzn_unregister_command: "hzn unregister -f -r"
     hzn_unregister_deep_command: "hzn unregister -f -r -D"
 
