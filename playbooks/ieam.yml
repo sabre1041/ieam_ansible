@@ -3,7 +3,7 @@
     - name: Install Docker-CE
       include_role:
         name: docker_ce
-      when: ieam_install_mode is defined and ieam_install_mode = 'device'
+      when: ieam_install_mode is defined and ieam_install_mode == 'device'
     - name: Configure IEAM
       include_role:
         name: ieam

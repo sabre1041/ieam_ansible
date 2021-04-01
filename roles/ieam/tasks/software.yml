@@ -11,3 +11,9 @@
     - kubectl
     - oc
   when: ieam_download_clis | bool
+
+- name: Install Skopeo
+  package:
+    state: present
+    name: skopeo
+  when: ieam_install_mode == 'cluster' and ieam_cluster_install_skopeo | bool

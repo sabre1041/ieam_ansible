@@ -32,7 +32,7 @@
 
 - name: Set Node List Result
   set_fact:
-    node_list_result: "{{ node_list_result_cluster if not node_list_result_cluster.skipped else node_list_result_device }}"
+    node_list_result: "{{ node_list_result_cluster if 'skipped' not in node_list_result_cluster or not node_list_result_cluster.skipped else node_list_result_device }}"
 
 - name: Unregistration
   block:

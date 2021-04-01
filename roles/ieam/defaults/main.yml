@@ -34,6 +34,7 @@ ieam_cluster_deployment_filename: deployment-template.yml
 ieam_cluster_persistentvolumeclaim_filename: persistentClaim-template.yml
 ieam_edge_cluster_files_filename: horizon-agent-edge-cluster-files.tar.gz
 ieam_agent_tar_filename: amd64_anax_k8s.tar.gz
+ieam_cluster_install_skopeo: true
 
 # Registration Variables
 ieam_node_name: ""
