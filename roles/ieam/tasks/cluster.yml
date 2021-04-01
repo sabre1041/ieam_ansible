@@ -51,7 +51,7 @@
         defaultRoute: true
 
 - name: Get the OpenShift registry route object
-  k8s_info:
+  community.kubernetes.k8s_info:
     name: default-route
     api_version: route.openshift.io/v1
     kind: route
@@ -81,7 +81,7 @@
     state: present
 
 - name: Get the Service Account for pushing images
-  k8s_info:
+  community.kubernetes.k8s_info:
     name: "{{ ieam_image_sa_name }}"
     namespace: "{{ ieam_agent_namespace }}"
     api_version: v1
@@ -92,7 +92,7 @@
   delay: 20
 
 - name: Get the Service Account Token Secret
-  k8s_info:
+  community.kubernetes.k8s_info:
     name: "{{ (created_ieam_sa.resources[0].secrets | selectattr('name', 'match', '^'+ ieam_image_sa_name + '-token-.*') | list | first).name }}"
     namespace: "{{ ieam_agent_namespace }}"
     api_version: v1
@@ -138,7 +138,7 @@
     ieam_agent_image: "{{ imageregistry_url }}/{{ ieam_agent_namespace }}/{{ ieam_agent_image_name }}:{{ ieam_agent_image_tag }}"
 
 - name: Check if Image Exists on Cluster
-  k8s_info:
+  community.kubernetes.k8s_info:
     name: "{{ ieam_agent_image_name }}"
     namespace: "{{ ieam_agent_namespace }}"
     api_version: image.openshift.io/v1
@@ -235,7 +235,7 @@
     state: present
 
 - name: Check deployment pods for ready check
-  kubernetes.core.k8s_info:
+  community.kubernetes.k8s_info:
     kind: Deployment
     api_version: apps/v1
     namespace: "{{ ieam_agent_namespace }}"

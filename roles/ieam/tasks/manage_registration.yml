@@ -15,7 +15,7 @@
 - name: Get Node List (Cluster)
   block:
     - name: Get the Agent pod
-      kubernetes.core.k8s_info:
+      community.kubernetes.k8s_info:
         kind: Pod
         namespace: "{{ ieam_agent_namespace }}"
         label_selectors:
@@ -23,7 +23,7 @@
       register: agent_pod
 
     - name: Check state of Agent
-      kubernetes.core.k8s_exec:
+      community.kubernetes.k8s_exec:
         namespace: "{{ ieam_agent_namespace }}"
         pod: "{{ agent_pod.resources[0].metadata.name }}"
         command: "{{ hzn_node_list_command }}"
@@ -51,12 +51,12 @@
     - name: Unregister Node (Cluster)
       block:
         - name: Unregister the Node (Cluster) - Cluster
-          kubernetes.core.k8s_exec:
+          community.kubernetes.k8s_exec:
             namespace: "{{ ieam_agent_namespace }}"
             pod: "{{ agent_pod.resources[0].metadata.name }}"
             command: "{{ hzn_unregister_command }}"
         - name: Unregister the Node (Deep Clean) - Cluster
-          kubernetes.core.k8s_exec:
+          community.kubernetes.k8s_exec:
             namespace: "{{ ieam_agent_namespace }}"
             pod: "{{ agent_pod.resources[0].metadata.name }}"
             command: "{{ hzn_unregister_deep_command }}"
@@ -72,7 +72,7 @@
           command: "{{ hzn_registration_command }}"
           when: ieam_install_mode == "device"
         - name: Register the Node (Cluster)
-          kubernetes.core.k8s_exec:
+          community.kubernetes.k8s_exec:
             namespace: "{{ ieam_agent_namespace }}"
             pod: "{{ agent_pod.resources[0].metadata.name }}"
             command: "{{ hzn_registration_command }}"
